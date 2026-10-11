@@ -56,10 +56,13 @@ const lastToast = () => { const t = toasts(); return t[t.length - 1] || ''; };
 const until = async (f, ms = 20000) => { const t0 = Date.now(); while (!f()) { if (Date.now() - t0 > ms) return false; await sleep(50); } return true; };
 (async () => {
   if (w.document.readyState === 'loading') await new Promise(r => w.document.addEventListener('DOMContentLoaded', r));
+  ok('connect screen shown when disconnected', !$('#connect').classList.contains('gone'));
   $('#bconnect').onclick(); await until(() => $('#chip').className.includes('on'));
   ok('connect + identify -> chip wired TH80 SE', $('#chip').textContent.includes('1091'));
-  await until(() => $('#ledinfo').textContent !== '');
-  ok('auto read lighting -> Neon', $('#ledinfo').textContent.startsWith('LightNeon'));
+  await until(() => $('#ledinfo').textContent.includes('brightness'));
+  ok('auto read lighting -> Neon shown as "Spectrum"', $('#ledinfo').textContent.startsWith('Spectrum') && $('#fx').value === 'LightNeon');
+  ok('connect screen hidden once identified', $('#connect').classList.contains('gone'));
+  ok('effect gallery highlights the current effect', w.document.querySelector('.fxcard.on').dataset.fx === 'LightNeon');
   // lighting apply
   $('#live').checked = false; $('#fx').value = 'LightAlwaysOn'; $('#fx').onchange(); $('#col').value = '#00ff00'; $('#bri').value = 3;
   let n = sent.length; $('#bledapply').onclick(); await until(() => lastToast().includes('Lighting'));

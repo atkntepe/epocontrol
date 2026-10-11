@@ -39,7 +39,7 @@
     await readProfile(); await readLed();
   }
   function chip() {
-    const c = $('#chip'); if (!S.dev) { c.className = 'chip off'; c.textContent = 'Not connected'; return; }
+    connectScreen(); const c = $('#chip'); if (!S.dev) { c.className = 'chip off'; c.textContent = 'Not connected'; return; }
     const pid = S.dev.productId;
     if (pid === 0x4011) { c.className = 'chip warn'; c.textContent = '2.4G dongle: read/write needs the USB cable'; return; }
     if (S.ident && S.ident.ok) { c.className = 'chip on'; c.textContent = 'Wired · TH80 SE · id 1091 · yc500'; return; }
@@ -62,10 +62,12 @@
     (e.options || []).forEach(v => o.append(el('option', { value: v }, v))); o.disabled = !e.options;
     $('#spd').disabled = e.speed === false || e.kind === 'off'; $('#col').disabled = $('#rainbow').disabled = e.rgb === false || e.kind === 'off' || e.kind === 'none';
     $('#bri').disabled = e.kind === 'off';
+    $$('.fxcard').forEach(c => c.classList.toggle('on', c.dataset.fx === e.type)); if (!S._ledReading) $('#ledinfo').textContent = fxName(e.type) + (e.kind === 'off' ? '' : ' · brightness ' + $('#bri').value + (e.speed === false ? '' : ' · speed ' + $('#spd').value)) + ' · preview'; const of = $('#optfield'); if (of) of.hidden = !e.options;
+    document.documentElement.style.setProperty('--c', $('#col').value); $$('.thumb').forEach(t => t.style.setProperty('--c', $('#col').value));
   }
   function outs() { $('#briv').textContent = $('#bri').value; $('#spdv').textContent = $('#spd').value; }
-  async function readLed() { need(); const r = await S.tx.read(P.getLed()); const l = P.parseLed(r); S.led = l; ledFormSet(l);
-    $('#ledraw').textContent = hex(r.slice(0, 8)); $('#ledinfo').textContent = l.type + ' · brightness ' + l.value + ' · speed ' + l.speed + (l.dazzle ? ' · rainbow' : ''); return l; }
+  async function readLed() { need(); const r = await S.tx.read(P.getLed()); const l = P.parseLed(r); S.led = l; S._ledReading = true; ledFormSet(l); S._ledReading = false;
+    $('#ledraw').textContent = hex(r.slice(0, 8)); $('#ledinfo').textContent = fxName(l.type) + ' · brightness ' + l.value + ' · speed ' + l.speed + (l.dazzle ? ' · rainbow' : ''); return l; }
   function scheduleLed() { if (!$('#live').checked) return; clearTimeout(ledTimer); ledTimer = setTimeout(() => guard(applyLed), 600); }
   async function applyLed(state) {
     need(); const want = state || ledFormRead();
@@ -87,13 +89,20 @@
     for (let i = 0; i < 128; i++) if (M[4 * i] === 0 && M[4 * i + 1] === 0 && M[4 * i + 2] === k.value && M[4 * i + 3] === 0) return i;
     return -1;
   }
+  const K = 1.25, PAD = 18;   // layout units -> px, inner bezel padding (presentation only)
+  const LABEL = { home: 'Home', 'Page\nUp': 'PgUp', 'Page\nDown': 'PgDn', '(space)': '', r_Shift: 'Shift', r_Alt: 'Alt', r_Ctrl: 'Ctrl', win: 'Win', 'Caps Lock': 'Caps', Backspace: 'Back', Delete: 'Del', 'U-': '', 'U+': '', Mute: '' };
   function drawBoard(host, onClick, deco) {
-    host.innerHTML = ''; const minY = Math.min(...LAYOUT.map(k => k.y)); const W = Math.max(...LAYOUT.map(k => k.x + k.w)) + 10, Hh = -minY + 40;
-    host.style.width = W * 1.4 + 'px'; host.style.height = Hh * 1.4 + 'px';
-    LAYOUT.forEach(k => { const s = slotOfKey(k); const b = el('div', { class: 'key' + (k.knob ? ' knob' : '') }, el('span', null, k.keyName.replace('\n', ' ')));
-      Object.assign(b.style, { left: k.x * 1.4 + 'px', top: (-k.y) * 1.4 + 'px', width: k.w * 1.4 + 'px', height: k.h * 1.4 + 'px' });
+    host.innerHTML = ''; const minY = Math.min(...LAYOUT.map(k => k.y)); const W = Math.max(...LAYOUT.map(k => k.x + k.w)), Hh = -minY + Math.max(...LAYOUT.map(k => k.h));
+    host.style.width = (W * K + 2 * PAD) + 'px'; host.style.height = (Hh * K + 2 * PAD) + 'px';
+    LAYOUT.forEach(k => { const s = slotOfKey(k); const name = k.keyName in LABEL ? LABEL[k.keyName] : k.keyName.replace('\n', ' ');
+      const b = el('div', { class: 'key' + (k.knob ? ' knob' : ''), title: k.keyName.replace('\n', ' ') }, el('span', null, name));
+      Object.assign(b.style, { left: (PAD + k.x * K) + 'px', top: (PAD + (-k.y) * K) + 'px', width: k.w * K + 'px', height: k.h * K + 'px' });
       b.dataset.slot = s; b.onclick = () => onClick(k, s, b); if (deco) deco(k, s, b); host.append(b); });
+    fitBoard(host);
   }
+  function fitBoard(host) { const wrap = host.parentElement; if (!wrap) return; const w = parseFloat(host.style.width), h = parseFloat(host.style.height);
+    const canvas = wrap.closest('.canvas'); const avail = (canvas ? canvas.clientWidth - 64 : wrap.clientWidth) || 900; const sc = Math.min(1.45, Math.max(0.5, avail / w)); host.style.transform = 'scale(' + sc + ')'; wrap.style.height = h * sc + 'px'; wrap.style.width = w * sc + 'px'; wrap.style.maxWidth = '100%'; }
+  function fitAll() { ['#hero', '#pkboard', '#kmboard'].forEach(s => { const h = $(s); if (h && h.offsetParent) { h.parentElement.style.width = ''; fitBoard(h); } }); }
   function pkPaint(k, s, b) { if (s < 0) return; const c = parseInt($('#pkcol').value.slice(1), 16); S.pk[s] = c; b.style.background = $('#pkcol').value; }
   function pkDeco(k, s, b) { if (S.pk[s] !== undefined) b.style.background = '#' + S.pk[s].toString(16).padStart(6, '0'); }
   async function pkUpload() {
@@ -217,14 +226,22 @@
   const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
   // ---------- wiring ----------
-  function nav(id) { $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.v === id)); $$('.view').forEach(v => v.hidden = v.id !== 'v-' + id); if (id === 'perkey') drawBoard($('#pkboard'), pkPaint, pkDeco); if (id === 'keymap') kmDraw(); }
+  function nav(id) { $$('.nav a').forEach(a => a.classList.toggle('active', a.dataset.v === id)); $$('.view').forEach(v => v.hidden = v.id !== 'v-' + id);
+    if (id === 'keys') { drawBoard($('#pkboard'), pkPaint, pkDeco); kmDraw(); } if (id === 'lighting') fitAll();
+    if (id === 'settings' && S.ident && S.ident.ok && !S._setRead) { S._setRead = true; guard(async () => { await readOptions(); await readDeb(); await readSleep(); }); } }
+  function keysMode(m) { $$('.modes button').forEach(b => b.classList.toggle('on', b.dataset.m === m)); $$('#v-keys .mode-paint').forEach(x => x.hidden = m !== 'paint'); $$('#v-keys .mode-remap').forEach(x => x.hidden = m !== 'remap');
+    if (m === 'paint') drawBoard($('#pkboard'), pkPaint, pkDeco); else kmDraw(); }
+  function gallery() { const G = $('#gallery'); const T = { LightOff: 'off', LightAlwaysOn: 'solid', LightBreath: 'breath', LightNeon: 'cycle', LightWave: 'wave', LightLineWave: 'wave', LightSineWave: 'wave', LightCircleWave: 'cycle', LightKaleidoscope: 'cycle', LightDazzing: 'cycle', LightRipple: 'ripple', LightConverage: 'ripple', LightRaindrop: 'drops', LightRainDown: 'drops', LightMeteor: 'snake', LightSnake: 'snake', LightPressAction: 'press', LightPressActionOff: 'press', LightUserPicture: 'pic', LightLaser: 'laser' };
+    P.EFFECTS.forEach(e => G.append(el('button', { class: 'fxcard', 'data-fx': e.type, onclick: () => { $('#fx').value = e.type; $('#fx').onchange(); } }, el('div', { class: 'thumb ' + (T[e.type] || 'solid') }), fxName(e.type)))); }
+  const fxName = t => ({ LightAlwaysOn: 'Static', LightNeon: 'Spectrum', LightConverage: 'Converge', LightDazzing: 'Dazzle', LightUserPicture: 'Custom', LightPressAction: 'Reactive', LightPressActionOff: 'Reactive off', LightOff: 'Off' })[t] || t.replace(/^Light/, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+  function connectScreen() { const c = $('#connect'); if (c) c.classList.toggle('gone', !!((S.ident && S.ident.ok) || S.explore)); }
   function init() {
     $$('.nav a').forEach(a => a.onclick = () => nav(a.dataset.v));
     $('#bconnect').onclick = () => guard(connect);
-    P.EFFECTS.forEach(e => $('#fx').append(el('option', { value: e.type }, e.type.replace(/^Light/, '').replace(/([a-z])([A-Z])/g, '$1 $2'))));
-    P.COMMONCOLOR.forEach(c => { const h = '#' + c.toString(16).padStart(6, '0'); $('#presets').append(el('button', { class: 'sw', style: 'background:' + h, title: h, onclick: () => { $('#col').value = h; $('#pkcol').value = h; scheduleLed(); } })); });
-    $('#fx').onchange = () => { fxChanged(); scheduleLed(); }; ['#bri', '#spd'].forEach(s => $(s).oninput = () => { outs(); scheduleLed(); });
-    ['#col', '#rainbow', '#fxopt'].forEach(s => $(s).onchange = scheduleLed); fxChanged(); outs();
+    gallery(); P.EFFECTS.forEach(e => $('#fx').append(el('option', { value: e.type }, e.type.replace(/^Light/, '').replace(/([a-z])([A-Z])/g, '$1 $2'))));
+    P.COMMONCOLOR.forEach(c => { const h = '#' + c.toString(16).padStart(6, '0'); $('#presets').append(el('button', { class: 'sw', style: 'background:' + h, title: h, onclick: () => { $('#col').value = h; fxChanged(); scheduleLed(); } })); $('#pkpresets').append(el('button', { class: 'sw', style: 'background:' + h, title: h, onclick: () => { $('#pkcol').value = h; } })); });
+    $('#fx').onchange = () => { fxChanged(); scheduleLed(); }; ['#bri', '#spd'].forEach(s => $(s).oninput = () => { outs(); fxChanged(); scheduleLed(); });
+    ['#col', '#rainbow', '#fxopt'].forEach(s => $(s).onchange = () => { fxChanged(); scheduleLed(); }); $('#col').oninput = () => fxChanged(); fxChanged(); outs();
     $('#bledread').onclick = () => guard(readLed); $('#bledapply').onclick = () => guard(() => applyLed());
     $('#bledoff').onclick = () => guard(() => applyLed({ type: 'LightOff' }));
     $('#pkfill').onclick = () => { const c = parseInt($('#pkcol').value.slice(1), 16); LAYOUT.forEach(k => { const s = slotOfKey(k); if (s >= 0) S.pk[s] = c; }); drawBoard($('#pkboard'), pkPaint, pkDeco); };
@@ -232,7 +249,7 @@
     $('#pkup').onclick = () => guard(pkUpload);
     $$('.prof').forEach(b => b.onclick = () => guard(() => setProfile(+b.dataset.p))); $('#bprof').onclick = () => guard(readProfile);
     $('#boptr').onclick = () => guard(readOptions); $('#boptw').onclick = () => guard(writeOptions);
-    $('#deb').oninput = () => $('#debv').textContent = $('#deb').value; $('#bdebr').onclick = () => guard(readDeb); $('#bdebw').onclick = () => guard(writeDeb);
+    $('#deb').oninput = () => $('#debv').textContent = $('#deb').value; $('#debv').textContent = $('#deb').value; $('#bdebr').onclick = () => guard(readDeb); $('#bdebw').onclick = () => guard(writeDeb);
     $('#bslr').onclick = () => guard(readSleep); $('#bslw').onclick = () => guard(writeSleep); $('#brate').onclick = () => guard(readRate);
     $('#brst').onclick = () => guard(factoryReset);
     Object.entries(H.KEYS).sort((a, b) => a[0] - b[0]).forEach(([v, n]) => $('#kmhid').append(el('option', { value: v }, n + ' (' + v + ')')));
@@ -250,11 +267,15 @@
     document.addEventListener('keydown', e => recKey(e, true)); document.addEventListener('keyup', e => recKey(e, false));
     $('#bmdel').onclick = () => { mEvents.push({ type: 'delay', value: 50 }); mDraw(); }; $('#bmclr').onclick = () => { mEvents = []; mDraw(); };
     $('#bmr').onclick = () => guard(mRead); $('#bmw').onclick = () => guard(mWrite);
-    $('#bmassign').onclick = () => { $('#kmtype').value = 'macro'; $('#kmtype').onchange(); $('#kmmidx').value = $('#midx').value; nav('keymap'); toast(null, 'Pick a key, then Assign and Write layer'); };
+    $('#bmassign').onclick = () => { $('#kmtype').value = 'macro'; $('#kmtype').onchange(); $('#kmmidx').value = $('#midx').value; nav('keys'); keysMode('remap'); toast(null, 'Pick a key, then Assign and Write layer'); };
     $('#mrep').onchange = mDraw; mDraw();
     $('#bfull').onclick = () => guard(fullBackup); $('#ffull').onchange = e => guard(() => fullRestore(e.target.files[0]));
     $('#logtog').onclick = () => $('#logwrap').classList.toggle('open');
     if (navigator.hid) navigator.hid.addEventListener('disconnect', e => { if (e.device === S.dev) { S.dev = null; S.tx = null; S.ident = null; chip(); toast(false, 'Keyboard disconnected'); } });
+    $$('.modes button').forEach(b => b.onclick = () => keysMode(b.dataset.m));
+    $('#bexplore').onclick = () => { S.explore = true; connectScreen(); fitAll(); };
+    drawBoard($('#hero'), () => {}); window.EPO_PREVIEW && window.EPO_PREVIEW.bind($('#hero'));
+    let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(fitAll, 80); });
     nav('lighting'); chip();
   }
   window.EPO_APP = { init, S, slotOfKey };
