@@ -1,0 +1,83 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>EpoControl · EPOMAKER TH80 SE</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="css/app.css"></head><body>
+<aside class="side"><div class="brand">Epo<b>Control</b><small>TH80 SE</small></div>
+<nav class="nav"><a data-v="lighting">💡 Lighting</a><a data-v="perkey">🎨 Per-key</a><a data-v="keymap">⌨️ Keymap</a><a data-v="macros">⏺ Macros</a><a data-v="profiles">🗂 Profiles</a><a data-v="settings">⚙️ Settings</a><a data-v="backup">💾 Backup</a></nav>
+<div class="foot">Protocol: EPOMAKER Driver 2.1.92 + sharkfin (GPL-3.0)</div></aside>
+<main>
+<header class="top"><button id="bconnect">Connect keyboard</button><span id="chip" class="chip off">Not connected</span><span class="muted">FW <span id="fw">–</span></span><span class="muted" id="profnow"></span></header>
+
+<section class="view" id="v-lighting"><h1>Lighting</h1>
+<div class="card grid2"><div>
+<label>Effect <select id="fx"></select></label>
+<label>Option <select id="fxopt"></select></label>
+<label>Brightness <input type="range" id="bri" min="0" max="4" value="4"> <b id="briv"></b>/4</label>
+<label>Speed <input type="range" id="spd" min="0" max="4" value="2"> <b id="spdv"></b>/4</label>
+<label class="row"><input type="checkbox" id="rainbow"> Rainbow (dazzle)</label>
+</div><div>
+<label>Colour <input type="color" id="col" value="#ff0000"></label><div id="presets" class="presets"></div>
+<label class="row"><input type="checkbox" id="live" checked> Live preview (debounced, ≥1.2 s between writes)</label>
+<div class="btns"><button id="bledread" class="sec">Read from keyboard</button><button id="bledapply">Apply</button><button id="bledoff" class="sec">Lights off</button></div>
+<p class="muted" id="ledinfo"></p><code id="ledraw"></code></div></div>
+<p class="muted">Effects and ranges are the driver's list for this board (Yy.light.types). Music-follow and screen-colour need host streaming and are not offered. Badge/side light: the driver has no side-light config for this board, so use Fn+PgUp / Fn+Home on the keyboard.</p></section>
+
+<section class="view" id="v-perkey" hidden><h1>Per-key RGB</h1>
+<div class="card"><div class="btns"><input type="color" id="pkcol" value="#00aaff"><button id="pkfill" class="sec">Fill all</button><button id="pkclear" class="sec">Clear</button><button id="pkup">Upload &amp; show (User Picture)</button><span class="muted">Queue: <b id="pkq">idle</b></span></div>
+<div class="boardwrap"><div id="pkboard" class="board"></div></div>
+<p class="muted">Click keys to paint. Uploads go to flash and are paced to at most 2 per 10 s (sharkfin), then the effect switches to User Picture after a 2 s settle. Read-back of per-key colour is not reliable on these boards, so it is not used to verify.</p></div></section>
+
+<section class="view" id="v-keymap" hidden><h1>Keymap</h1>
+<div class="card"><div class="btns">
+<label>Profile <select id="kmp"><option value="0">1</option><option value="1">2</option><option value="2">3</option></select></label>
+<label>Layer <select id="kml"><option value="n">Base</option><option value="fn">Fn layer</option></select></label>
+<button id="bkmr" class="sec">Read layer</button><button id="bkmb" class="sec">Backup all layers (JSON)</button>
+<label class="file">Restore backup<input type="file" id="fkmr" accept=".json"></label></div>
+<div class="boardwrap"><div id="kmboard" class="board km"></div></div>
+<div class="grid2"><div><p id="kmcur" class="muted">Pick a key.</p>
+<label>Assign <select id="kmtype"><option value="key">Key / combo</option><option value="media">Media key</option><option value="macro">Macro</option><option value="fn">Fn</option><option value="none">Disabled</option><option value="default">Factory default</option></select></label>
+<label class="kmopt t-key">Modifier <select id="kmmod"></select></label><label class="kmopt t-key">Key <select id="kmhid"></select></label>
+<label class="kmopt t-media">Media <select id="kmmedia"></select></label>
+<label class="kmopt t-macro">Macro # <input type="number" id="kmmidx" min="0" max="49" value="0"></label>
+<label class="kmopt t-macro">Mode <select id="kmmmode"><option value="0">Repeat N times</option><option value="1">Toggle on/off</option><option value="2">Repeat while held</option></select></label>
+<div class="btns"><button id="bkmset" class="sec">Assign to key</button><button id="bkmw">Write layer</button></div><p id="kmdirty" class="warn"></p></div>
+<div><p class="muted">The first write in a session automatically downloads a backup of all 6 layers (3 profiles × base/Fn) before writing. Each write is 9 pages (driver JC._setKeyConfig) and is verified by reading the layer back. Changed keys are outlined.</p></div></div></div></section>
+
+<section class="view" id="v-macros" hidden><h1>Macros</h1>
+<div class="card grid2"><div><div class="btns"><label>Macro # <input type="number" id="midx" min="0" max="49" value="0"></label><button id="bmr" class="sec">Read</button>
+<label>Repeat <input type="number" id="mrep" min="1" max="65535" value="1"></label></div>
+<div class="btns"><button id="bmrec" class="sec">● Record</button><button id="bmdel" class="sec">+ Delay</button><button id="bmclr" class="sec">Clear</button></div>
+<div id="mlist" class="mlist"></div><p class="muted" id="mbytes"></p>
+<div class="btns"><button id="bmw">Write macro</button><button id="bmassign" class="sec">Assign to a key →</button></div></div>
+<div><p class="muted">Recording captures key down/up and the gaps between them from this browser window. Encoding is a line-by-line port of the driver's eF.setMacro (256-byte buffer); writes use BGe._setMacro (opcode 0x16, pages of 56 bytes) and are verified by reading the macro back (0x8B).</p></div></div></section>
+
+<section class="view" id="v-profiles" hidden><h1>Profiles</h1>
+<div class="card"><div class="btns"><button class="prof" data-p="0">Profile 1</button><button class="prof" data-p="1">Profile 2</button><button class="prof" data-p="2">Profile 3</button><button id="bprof" class="sec">Read active</button></div>
+<p class="muted">Same as Fn+Z / X / C. Switching is verified by reading the active profile back (0x85).</p></div></section>
+
+<section class="view" id="v-settings" hidden><h1>Settings</h1>
+<div class="card"><h2>Keyboard options <small>(read-modify-write, per active profile)</small></h2>
+<div class="btns"><button id="boptr" class="sec">Read</button><button id="boptw">Write</button></div>
+<label class="row"><input type="checkbox" id="o_win"> Win key lock</label><label class="row"><input type="checkbox" id="o_wasd"> Swap WASD and arrows</label>
+<label class="row"><input type="checkbox" id="o_led"> Backlight off (ledOff)</label><label class="row"><input type="checkbox" id="o_ps"> Power save</label>
+<p class="muted" id="o_ro"></p><code id="o_raw"></code>
+<p class="muted">Only these 3 bits and the power-save byte are ever changed. Every other bit is copied from a fresh read. The keyboard-lock bit (0x80) is forced to 0 and asserted in code. Mac/Win is shown read-only because the driver's setter and getter disagree on its bit.</p></div>
+<div class="card grid2"><div><h2>Debounce</h2><label>Value <input type="range" id="deb" min="1" max="10" value="5"> <b id="debv"></b></label><div class="btns"><button id="bdebr" class="sec">Read</button><button id="bdebw">Write</button></div></div>
+<div><h2>Sleep timers <small>(minutes, 2.4G / Bluetooth only)</small></h2>
+<label>BT sleep <input type="number" id="time_bt" min="1" max="60"></label><label>2.4G sleep <input type="number" id="time_24" min="1" max="60"></label>
+<label>BT deep sleep <input type="number" id="deepTime_bt" min="10" max="60"></label><label>2.4G deep sleep <input type="number" id="deepTime_24" min="10" max="60"></label>
+<div class="btns"><button id="bslr" class="sec">Read</button><button id="bslw">Write</button></div></div></div>
+<div class="card"><h2>Info</h2><div class="btns"><button id="brate" class="sec">Read polling rate</button><span id="rate" class="muted"></span></div><p class="muted">Polling rate is read-only here. Battery level: the driver has no battery command for this board over the cable, so it is not shown.</p></div>
+<div class="card danger"><h2>Factory reset</h2><p>Resets all profiles, lighting, keymaps and macros (driver JF.setReSet, opcode 0x02). Make a full backup first.</p>
+<div class="btns"><input id="rstc" placeholder="Type: RESET TH80 SE"><button id="brst" class="danger">Factory reset</button></div></div></section>
+
+<section class="view" id="v-backup" hidden><h1>Backup &amp; restore</h1>
+<div class="card"><div class="btns"><button id="bfull">Download full backup (JSON)</button></div>
+<p class="muted">Reads lighting, active profile, options for all 3 profiles, debounce, sleep timers, all 6 keymap layers, every macro they reference, and the per-key colour buffer.</p>
+<h2>Restore</h2><div class="btns"><label class="row"><input type="checkbox" class="rpart" value="lighting" checked>Lighting</label><label class="row"><input type="checkbox" class="rpart" value="profile" checked>Active profile</label>
+<label class="row"><input type="checkbox" class="rpart" value="options" checked>Options</label><label class="row"><input type="checkbox" class="rpart" value="debounce" checked>Debounce</label>
+<label class="row"><input type="checkbox" class="rpart" value="sleep" checked>Sleep</label><label class="row"><input type="checkbox" class="rpart" value="keymaps">Keymaps</label><label class="row"><input type="checkbox" class="rpart" value="macros">Macros</label></div>
+<label class="file">Choose backup file and restore<input type="file" id="ffull" accept=".json"></label></div></section>
+
+<div id="logwrap" class="logwrap"><button id="logtog" class="logtog">TX / RX log ▾</button><div id="log"></div></div>
+</main><div id="toasts"></div>
+<script src="js/data.js"></script><script src="js/hid-names.js"></script><script src="js/proto.js"></script><script src="js/transport.js"></script><script src="js/app.js"></script>
+</body></html>
