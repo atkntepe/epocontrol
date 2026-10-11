@@ -32,8 +32,10 @@ input[type=color]{width:60px;height:36px;border:0;background:none;vertical-align
 <div id="s2why" class="warn">Locked until Identify finds a known command set and Read lighting succeeds.</div>
 <div style="margin-top:10px"><input type="color" id="col" value="#7c9cff" disabled><button id="bSend" disabled>Send colour</button><button id="bRestore" class="sec" disabled>Restore</button></div>
 <div id="s2out" class="in"></div></section>
+<section class="card full"><h2>5 · Read options (read-only, 0x85 + 0x86)</h2>
+<button id="bOpt" disabled>Read options</button><div id="optOut" class="in">Not run. Needs Identify first.</div></section>
 <div id="log"></div>
-<div class="full in" style="font-size:12px">Protocol from sharkfin (GPL-3.0, github.com/dniminenn/sharkfin @30d6b7e): app/src-tauri/src/protocol/mod.rs, protocol/cmd.rs, wire.rs, registry.rs, data/devices.json, data/led-flags*.json, docs/PROTOCOL.md. This page only ever sends 0x8F, 0x87 and 0x07.</div>
+<div class="full in" style="font-size:12px">Protocol from sharkfin (GPL-3.0, github.com/dniminenn/sharkfin @30d6b7e): app/src-tauri/src/protocol/mod.rs, protocol/cmd.rs, wire.rs, registry.rs, data/devices.json, data/led-flags*.json, docs/PROTOCOL.md. This page only ever sends 0x8F, 0x87, 0x85, 0x86 (reads) and 0x07 (lighting write).</div>
 </main>
 <script>
 const REG=
@@ -54,7 +56,7 @@ const $=id=>document.getElementById(id);
 const hex=a=>Array.from(a,b=>b.toString(16).padStart(2,'0')).join(' ');
 const trim=a=>{let n=a.length;while(n>8&&a[n-1]===0)n--;return hex(a.slice(0,n))+(n<a.length?' …(00×'+(a.length-n)+')':'')};
 function log(cls,msg){const d=document.createElement('div');d.className=cls;d.textContent=new Date().toLocaleTimeString()+'  '+msg;$('log').appendChild(d);$('log').scrollTop=1e9}
-const ALLOWED=new Set([0x8F,0x87,0x07]); // hard allow-list
+const ALLOWED=new Set([0x8F,0x87,0x07,0x85,0x86]); // hard allow-list; 0x85/0x86 are READS only (GET_PROFILE / GET_KBOPTION). 0x06 is never allowed.
 const FAMILIES=['yc500','gen2'];          // registry.rs KNOWN_FAMILIES
 const MODES={0:'Off',1:'Static',2:'Breathing',3:'Spectrum cycle',4:'Wave',5:'Ripple',6:'Star dots',7:'Flow',8:'Key shadow',9:'Layers',10:'Sine wave',11:'Spring',12:'Neon',13:'User picture',14:'Radiant',15:'Loop',16:'Colour grid',17:'Snowfall',18:'Meteor',19:'Silent snow',20:'Music 3',21:'Screen colour',22:'Music 2',23:'Train',24:'Endless',25:'(host data)'};
 const PRESETS=[[255,0,0],[255,128,0],[255,255,0],[0,255,0],[0,255,255],[0,0,255],[255,0,255]];
@@ -95,7 +97,7 @@ $('bId').onclick=async()=>{if(busy)return;busy=true;try{
  const e=REG[id];const fam=e?e[1]:'not in registry';
  ident={id,family:fam,swapped:!!(e&&e[2]),writable:!!e&&FAMILIES.includes(fam),name:e?e[0]:'?'};
  $('idOut').innerHTML=`<table><tr><td>Device ID</td><td>${id}</td></tr><tr><td>Registry board</td><td>${e?e[0]+' ('+e[3]+')':'<span class=bad>unknown ID</span>'}</td></tr><tr><td>Command set</td><td class=${ident.writable?'ok':'bad'}>${fam}${ident.writable?'':' → writes refused'}</td></tr><tr><td>LED flag lineage</td><td>${ident.swapped?'swapped (7 rainbow, 8 fixed)':'default (7 fixed, 8 rainbow)'}</td></tr><tr><td>Raw reply</td><td class=hex>${trim(r)}</td></tr></table>`;
- $('bRead').disabled=false;lock();
+ $('bRead').disabled=false;$('bOpt').disabled=!(ident.writable);lock();
 }catch(e){log('er','Identify: '+e.message)}finally{busy=false}};
 $('bRead').onclick=async()=>{if(busy)return;busy=true;try{
  const {ok,r}=await roundtrip(packet(0x87,[],7));
@@ -133,5 +135,27 @@ $('bRestore').onclick=()=>{const r=led.raw,W=ledWire(),nib=r[4]&15;
  const uiSpeed=Math.max(0,Math.min(W.speedMax,W.speedMax-r[2]));
  const p=ledPayload(r[1],uiSpeed,r[3],r[4]>>4,nib===W.dazzle,led.rgb||[r[5],r[6],r[7]]);
  return write(p,'restore mode '+r[1]+' ('+(MODES[r[1]]||'?')+'), speed '+uiSpeed+'/4, brightness '+r[3],[r[1],p[1],r[3]])};
+// Read options. Driver 2.1.92 (TH80 SE chain): getProfile = bare 0x85 (class FF FEA_CMD_GET_PROFILE 133),
+// profile = reply[1]; getKbOption (class JC) = [0x86, profile], BIT7 checksum; reply byte 2 bits:
+// 1 winLock, 2 mac, 8 WASD swap, 16 ledOff, 32 sLedOff, 64 keyboardMode, 128 keyboardLock; byte 3 bit0 Fn matrix; byte 4 powerSaveMode.
+$('bOpt').onclick=async()=>{if(busy||!(ident&&ident.writable&&ident.family==='yc500')){$('optOut').innerHTML='<span class=bad>Refused: needs an identified yc500 board.</span>';return}busy=true;try{
+ await sleep(500);const pr=await roundtrip(packet(0x85,[],7));await sleep(500);
+ if(!pr.ok){$('optOut').innerHTML='<span class=bad>No 0x85 echo.</span><div class=hex>'+(pr.r?trim(pr.r):'')+'</div>';return}
+ const prof=pr.r[1];
+ await sleep(500);const op=await roundtrip(packet(0x86,[prof],7));await sleep(500);
+ if(!op.ok){$('optOut').innerHTML='<span class=bad>No 0x86 echo.</span><div class=hex>'+(op.r?trim(op.r):'')+'</div>';return}
+ const r=op.r,b=r[2],yes=v=>v?'<b>yes</b>':'no';
+ const ledOff=!!(b&16);
+ $('optOut').innerHTML=(ledOff?'<div class=bad style="font-size:16px;margin-bottom:8px">⚠ ledOff (0x10) is SET: the backlight is switched off in options for profile '+prof+'.</div>':'<div class=ok style="margin-bottom:8px">ledOff (0x10) is clear.</div>')+
+ `<table><tr><td>Active profile (0x85)</td><td>${prof}</td></tr>
+ <tr><td>Byte 2</td><td class=hex>0x${b.toString(16).padStart(2,'0')}</td></tr>
+ <tr><td>Win lock (0x01)</td><td>${yes(b&1)}</td></tr><tr><td>System (0x02)</td><td>${b&2?'Mac':'Win'}</td></tr>
+ <tr><td>WASD/arrow swap (0x08)</td><td>${yes(b&8)}</td></tr><tr><td>ledOff (0x10)</td><td class=${ledOff?'bad':'ok'}>${yes(ledOff)}</td></tr>
+ <tr><td>Side light off (0x20)</td><td>${yes(b&32)}</td></tr><tr><td>Keyboard mode (0x40)</td><td>${yes(b&64)}</td></tr>
+ <tr><td>Keyboard lock (0x80)</td><td>${yes(b&128)}</td></tr><tr><td>Fn matrix flag (byte 3)</td><td>0x${r[3].toString(16).padStart(2,'0')}</td></tr>
+ <tr><td>powerSaveMode (byte 4)</td><td>${r[4]} (${r[4]?'on':'off'})</td></tr>
+ <tr><td>Raw 0x85</td><td class=hex>${trim(pr.r)}</td></tr><tr><td>Raw 0x86</td><td class=hex>${trim(r)}</td></tr></table>
+ <div class=in style="margin-top:6px">Read-only. Replies on these boards can be stale; compare with a second read.</div>`;
+}catch(e){log('er','Options: '+e.message)}finally{busy=false}};
 lock();
 </script></body></html>
