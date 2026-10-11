@@ -1,4 +1,5 @@
 # EpoControl
+<img width="2556" height="1265" alt="image" src="https://github.com/user-attachments/assets/e7aabcf3-38ff-4cf8-a83c-aa5817328b65" />
 
 An install-free web app for the **EPOMAKER TH80 SE** (USB `3151:4015`, device id 1091). It runs in Chrome or Edge over WebHID and is served from `http://localhost:8765/` by a small PowerShell script.
 
