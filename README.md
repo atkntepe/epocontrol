@@ -51,3 +51,7 @@ NODE_PATH=<jsdom> node test/sim-ui.js       # UI flows against a simulated keybo
 ## License
 
 GPL-3.0. See `LICENSE`.
+
+## macOS
+
+Run `./start-epocontrol-mac.sh` (uses the built-in python3 and opens a Chrome or Edge app window). To get a double-clickable app: `osacompile -o ~/Applications/EpoControl.app -e 'do shell script "PATH/TO/start-epocontrol-mac.sh > /dev/null 2>&1 &"'`. Safari does not support WebHID.
